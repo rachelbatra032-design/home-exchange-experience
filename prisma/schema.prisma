@@ -1,0 +1,370 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Residency {
+  INDIAN_RESIDENT
+  NRI
+  OCI
+}
+
+enum IdentityStatus {
+  UNVERIFIED
+  VERIFIED
+  REJECTED
+}
+
+enum HomeKind {
+  APARTMENT
+  INDEPENDENT
+}
+
+enum HomeStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  CHANGES_REQUESTED
+  LIVE
+  SUSPENDED
+}
+
+enum Authority {
+  OWNER
+  POA
+}
+
+enum Handover {
+  OWNER
+  CARETAKER
+  SOCIETY_DESK
+}
+
+enum DocumentType {
+  SALE_DEED
+  POA
+  TAX_OR_ELECTRICITY
+  SOCIETY_MAINTENANCE
+  SOCIETY_NOC
+  POSSESSION_DECLARATION
+  ASSOCIATION_DECLARATION
+  BANK_NOC
+}
+
+enum DocStatus {
+  UPLOADED
+  APPROVED
+  REJECTED
+}
+
+enum StayStatus {
+  REQUESTED
+  ACCEPTED
+  AWAITING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  COMPLETED
+  CANCELLED
+  ENDED_EARLY
+}
+
+enum PointsState {
+  NONE
+  HELD
+  SETTLED
+  RELEASED
+}
+
+enum DepositState {
+  UNPAID
+  HELD
+  REFUNDED
+  APPLIED
+  PARTIALLY_APPLIED
+}
+
+enum ClaimStatus {
+  OPEN
+  ANSWERED
+  RESOLVED
+}
+
+enum PaymentKind {
+  MEMBERSHIP
+  DEPOSIT
+  DEPOSIT_REFUND
+  DEPOSIT_APPLIED
+}
+
+enum ReportKind {
+  CHECKIN
+  CHECKOUT
+}
+
+model User {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  name             String
+  phone            String?
+  residency        Residency      @default(INDIAN_RESIDENT)
+  isAdmin          Boolean        @default(false)
+  identityStatus   IdentityStatus @default(UNVERIFIED)
+  maskedId         String?
+  idType           String?
+  vendorRef        String?
+  consentAt        DateTime?
+  caretakerName    String?
+  caretakerPhone   String?
+  membershipUntil  DateTime?
+  welcomeGranted   Boolean        @default(false)
+  welcomeForfeited Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  homes            Home[]
+  pointEntries     PointEntry[]
+  guestStays       Stay[]         @relation("GuestStays")
+  hostStays        Stay[]         @relation("HostStays")
+  messages         Message[]
+  payments         Payment[]
+  reports          ConditionReport[]
+  claimsOpened     Claim[]        @relation("ClaimsOpened")
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model CityProfile {
+  id                 String         @id @default(cuid())
+  city               String         @unique
+  tier               Float
+  enabled            Boolean        @default(true)
+  policeIntimation   Boolean        @default(false)
+  counselNote        String
+  apartmentRequires  DocumentType[]
+  houseRequires      DocumentType[]
+}
+
+model Home {
+  id                   String     @id @default(cuid())
+  ownerId              String
+  owner                User       @relation(fields: [ownerId], references: [id])
+  name                 String
+  kind                 HomeKind
+  city                 String
+  neighbourhood        String
+  address              String
+  description          String
+  bedrooms             Int
+  bathrooms            Int
+  hasAc                Boolean    @default(false)
+  hasParking           Boolean    @default(false)
+  hasPool              Boolean    @default(false)
+  hasWorkspace         Boolean    @default(false)
+  occupancyCap         Int
+  houseRules           String
+  excludedAreas        String
+  keyCount             Int
+  handover             Handover
+  nightlyPoints        Int        @default(0)
+  status               HomeStatus @default(DRAFT)
+  authority            Authority  @default(OWNER)
+  soleOwner            Boolean    @default(true)
+  poaCoversCoOwners    Boolean    @default(false)
+  hasAssociation       Boolean    @default(false)
+  caretakerName        String?
+  caretakerPhone       String?
+  reviewerNote         String?
+  nameMatch            Boolean    @default(false)
+  addressMatch         Boolean    @default(false)
+  titleChecked         Boolean    @default(false)
+  coOwnerChecked       Boolean    @default(false)
+  permissionsChecked   Boolean    @default(false)
+  falseDocuments       Boolean    @default(false)
+  submittedAt          DateTime?
+  listedAt             DateTime?
+  createdAt            DateTime   @default(now())
+  documents            HomeDocument[]
+  photos               HomePhoto[]
+  coOwners             CoOwner[]
+  stays                Stay[]
+
+  @@index([city, status])
+}
+
+model CoOwner {
+  id         String    @id @default(cuid())
+  homeId     String
+  home       Home      @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  name       String
+  email      String
+  signedAt   DateTime?
+  signedName String?
+}
+
+model HomeDocument {
+  id         String       @id @default(cuid())
+  homeId     String
+  home       Home         @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  type       DocumentType
+  fileName   String
+  storageKey String
+  status     DocStatus    @default(UPLOADED)
+  validUntil DateTime?
+  note       String?
+  uploadedAt DateTime     @default(now())
+}
+
+model HomePhoto {
+  id      String @id @default(cuid())
+  homeId  String
+  home    Home   @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  path    String
+  caption String
+  sort    Int    @default(0)
+}
+
+model PointEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  stayId    String?
+  stay      Stay?    @relation(fields: [stayId], references: [id])
+  bucket    String
+  delta     Int
+  memo      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Stay {
+  id                   String       @id @default(cuid())
+  homeId               String
+  home                 Home         @relation(fields: [homeId], references: [id])
+  hostId               String
+  host                 User         @relation("HostStays", fields: [hostId], references: [id])
+  guestId              String
+  guest                User         @relation("GuestStays", fields: [guestId], references: [id])
+  startDate            DateTime
+  endDate              DateTime
+  nights               Int
+  nightlyPoints        Int
+  points               Int
+  guestNames           String
+  vehicle              String?
+  idType               String
+  status               StayStatus
+  hostSignedAt         DateTime?
+  guestSignedAt        DateTime?
+  hostSignedName       String?
+  guestSignedName      String?
+  rulesAcceptedAt      DateTime?
+  pointsState          PointsState  @default(NONE)
+  depositRupees        Int
+  depositState         DepositState @default(UNPAID)
+  depositAppliedRupees Int          @default(0)
+  hostIntimationAt     DateTime?
+  checkInAt            DateTime?
+  checkOutAt           DateTime?
+  cancelledAt          DateTime?
+  cancelReason         String?
+  createdAt            DateTime     @default(now())
+  messages             Message[]
+  reports              ConditionReport[]
+  claims               Claim[]
+  payments             Payment[]
+  pointEntries         PointEntry[]
+
+  @@index([guestId])
+  @@index([hostId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  stayId    String
+  stay      Stay     @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model ConditionReport {
+  id        String     @id @default(cuid())
+  stayId    String
+  stay      Stay       @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  kind      ReportKind
+  authorId  String
+  author    User       @relation(fields: [authorId], references: [id])
+  notes     String
+  createdAt DateTime   @default(now())
+  photos    ReportPhoto[]
+}
+
+model ReportPhoto {
+  id         String           @id @default(cuid())
+  reportId   String
+  report     ConditionReport  @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  storageKey String
+  fileName   String
+}
+
+model Claim {
+  id             String      @id @default(cuid())
+  stayId         String
+  stay           Stay        @relation(fields: [stayId], references: [id], onDelete: Cascade)
+  openerId       String
+  opener         User        @relation("ClaimsOpened", fields: [openerId], references: [id])
+  description    String
+  amountRupees   Int
+  status         ClaimStatus @default(OPEN)
+  response       String?
+  appliedRupees  Int?
+  resolutionNote String?
+  createdAt      DateTime    @default(now())
+  answeredAt     DateTime?
+  resolvedAt     DateTime?
+  photos         ClaimPhoto[]
+}
+
+model ClaimPhoto {
+  id         String @id @default(cuid())
+  claimId    String
+  claim      Claim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  storageKey String
+  fileName   String
+}
+
+model Payment {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  stayId      String?
+  stay        Stay?       @relation(fields: [stayId], references: [id])
+  kind        PaymentKind
+  amountPaise Int
+  gstPaise    Int         @default(0)
+  note        String
+  createdAt   DateTime    @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String?
+  action      String
+  subjectType String
+  subjectId   String
+  note        String
+  createdAt   DateTime @default(now())
+}
